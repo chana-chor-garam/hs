@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Smart Home Security Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    input, button, select { margin: 5px; padding: 8px; font-size: 16px; }
+    .tab-buttons { margin: 10px 0; }
+    .tab-buttons button { padding: 10px; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+
+    /* Simple card styling for door controls/status */
+    .cards-container {
+      display: flex;
+      gap: 20px;
+      margin-top: 20px;
+    }
+    .card {
+      flex: 1;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .lock-button {
+      background-color: #28a745; 
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      margin-right: 5px;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    .unlock-button {
+      background-color: #dc3545; 
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      margin-right: 5px;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    .door-status-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 4px;
+    }
+    .locked-dot { background-color: green; }
+    .unlocked-dot { background-color: red; }
+    .open-dot { background-color: orange; }
+    .closed-dot { background-color: gray; }
+  </style>
+</head>
+<body>
+  <h1>Smart Home Security Dashboard</h1>
+
+  <!-- DOOR CONTROLS & STATUS -->
+  <div class="cards-container">
+    <!-- Door Controls Card -->
+    <div class="card">
+      <h2>🚪 Door Controls</h2>
+      <div>
+        <h3>Main Door</h3>
+        <button class="lock-button" onclick="updateDoor('main', true)">Lock</button>
+        <button class="unlock-button" onclick="updateDoor('main', false)">Unlock</button>
+      </div>
+      <div>
+        <h3>Garden Door</h3>
+        <button class="lock-button" onclick="updateDoor('garden', true)">Lock</button>
+        <button class="unlock-button" onclick="updateDoor('garden', false)">Unlock</button>
+      </div>
+    </div>
+
+    <!-- Door Status Card -->
+    <div class="card">
+      <h2>🚪 Door Status</h2>
+      <p>
+        Main Door: 
+        <span id="mainDoorLockedDot" class="door-status-dot"></span>
+        <span id="mainDoorLockedText"></span>, 
+        <span id="mainDoorOpenDot" class="door-status-dot"></span>
+        <span id="mainDoorOpenText"></span>
+      </p>
+      <p>
+        Garden Door: 
+        <span id="gardenDoorLockedDot" class="door-status-dot"></span>
+        <span id="gardenDoorLockedText"></span>, 
+        <span id="gardenDoorOpenDot" class="door-status-dot"></span>
+        <span id="gardenDoorOpenText"></span>
+      </p>
+      <p>Last Activity: <span id="lastActivity">--</span></p>
+    </div>
+  </div>
+
+  <!-- PEOPLE MANAGEMENT PORTAL -->
+  <h2 style="margin-top: 40px;">People Management Portal</h2>
+  <div class="tab-buttons">
+    <button onclick="openTab('addTab')">Add Person</button>
+    <button onclick="openTab('updateTab')">Update Person</button>
+    <button onclick="openTab('deleteTab')">Delete Person</button>
+  </div>
+
+  <!-- Add Person Tab -->
+  <div id="addTab" class="tab-content active">
+    <h3>Add Person</h3>
+    <form id="addForm">
+      <input type="text" name="name" placeholder="Enter Name" required>
+      <input type="text" name="biometricid" placeholder="Enter Biometric ID" required>
+      <!-- Door Access Checkboxes -->
+      <label>
+        <input type="checkbox" name="door_main" value="main">
+        Main Door Access
+      </label>
+      <label>
+        <input type="checkbox" name="door_garden" value="garden">
+        Garden Door Access
+      </label>
+      <button type="submit">Add Person</button>
+    </form>
+  </div>
+
+  <!-- Update Person Tab -->
+  <div id="updateTab" class="tab-content">
+    <h3>Update Person</h3>
+    <select id="updateSelect" onchange="loadPersonDetails()">
+      <option value="">Select Person</option>
+    </select>
+    <input type="text" id="updateName" placeholder="New Name">
+    <!-- Update Door Access Checkboxes -->
+    <label>
+      <input type="checkbox" id="updateMainDoorAccess" value="main">
+      Main Door Access
+    </label>
+    <label>
+      <input type="checkbox" id="updateGardenDoorAccess" value="garden">
+      Garden Door Access
+    </label>
+    <button onclick="updatePerson()">Update</button>
+  </div>
+
+  <!-- Delete Person Tab -->
+  <div id="deleteTab" class="tab-content">
+    <h3>Delete Person</h3>
+    <select id="deleteSelect">
+      <option value="">Select Person</option>
+    </select>
+    <button onclick="deletePerson()">Delete</button>
+  </div>
+
+  <!-- People Table -->
+  <h3>All People</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Biometric ID</th>
+        <th>Door Access</th>
+      </tr>
+    </thead>
+    <tbody id="peopleTable">
+      <!-- People data will be inserted here -->
+    </tbody>
+  </table>
+
+  <script>
+    // --------------------------
+    // DOOR FUNCTIONS
+    // --------------------------
+    async function fetchDoors() {
+      const res = await fetch('/api/doors');
+      return await res.json();
+    }
+
+    async function updateDoor(doorName, lockState) {
+      await fetch(`/api/doors/${doorName}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        // If you want to update the locked state only, you can leave open as is. You might extend this to update open state as well.
+        body: JSON.stringify({ locked: lockState })
+      });
+      loadDoorStatus();
+    }
+
+    async function loadDoorStatus() {
+      const doors = await fetchDoors();
+      const mainDoor = doors.find(d => d.doorName === 'main') || {};
+      const gardenDoor = doors.find(d => d.doorName === 'garden') || {};
+
+      document.getElementById('mainDoorLockedDot').className = mainDoor.locked ? 'door-status-dot locked-dot' : 'door-status-dot unlocked-dot';
+      document.getElementById('mainDoorLockedText').textContent = mainDoor.locked ? 'Locked' : 'Unlocked';
+      document.getElementById('mainDoorOpenDot').className = mainDoor.open ? 'door-status-dot open-dot' : 'door-status-dot closed-dot';
+      document.getElementById('mainDoorOpenText').textContent = mainDoor.open ? 'Open' : 'Closed';
+
+      document.getElementById('gardenDoorLockedDot').className = gardenDoor.locked ? 'door-status-dot locked-dot' : 'door-status-dot unlocked-dot';
+      document.getElementById('gardenDoorLockedText').textContent = gardenDoor.locked ? 'Locked' : 'Unlocked';
+      document.getElementById('gardenDoorOpenDot').className = gardenDoor.open ? 'door-status-dot open-dot' : 'door-status-dot closed-dot';
+      document.getElementById('gardenDoorOpenText').textContent = gardenDoor.open ? 'Open' : 'Closed';
+
+      const lastTimes = [mainDoor.lastActivity, gardenDoor.lastActivity].filter(Boolean);
+      if (lastTimes.length > 0) {
+        lastTimes.sort((a, b) => new Date(b) - new Date(a));
+        document.getElementById('lastActivity').textContent = new Date(lastTimes[0]).toLocaleString();
+      } else {
+        document.getElementById('lastActivity').textContent = '--';
+      }
+    }
+    setInterval(loadDoorStatus, 5000);
+
+    // --------------------------
+    // PEOPLE FUNCTIONS
+    // --------------------------
+    async function fetchPeople() {
+      const res = await fetch('/api/people');
+      return await res.json();
+    }
+
+    async function loadPeople() {
+      const people = await fetchPeople();
+      const tableBody = document.getElementById('peopleTable');
+      tableBody.innerHTML = people.map(p => `
+        <tr>
+          <td>${p.name}</td>
+          <td>${p.biometricid}</td>
+          <td>${p.doors ? p.doors.join(', ') : ''}</td>
+        </tr>
+      `).join('');
+      
+      const updateSelect = document.getElementById('updateSelect');
+      const deleteSelect = document.getElementById('deleteSelect');
+      updateSelect.innerHTML = '<option value="">Select Person</option>';
+      deleteSelect.innerHTML = '<option value="">Select Person</option>';
+      people.forEach(p => {
+        const optionText = `${p.name} (${p.biometricid})${p.doors ? ' - ' + p.doors.join(', ') : ''}`;
+        const option = `<option value="${p.biometricid}">${optionText}</option>`;
+        updateSelect.innerHTML += option;
+        deleteSelect.innerHTML += option;
+      });
+    }
+
+    document.getElementById('addForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const formData = new FormData(this);
+      const doors = [];
+      if (formData.get('door_main')) { doors.push("main"); }
+      if (formData.get('door_garden')) { doors.push("garden"); }
+      const data = Object.fromEntries(formData.entries());
+      // Remove individual checkbox values and add the collected array
+      delete data.door_main;
+      delete data.door_garden;
+      data.doors = doors;
+
+      await fetch('/api/people', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      this.reset();
+      loadPeople();
+    });
+
+    // When a person is selected in the update tab, load their door access checkboxes
+    async function loadPersonDetails() {
+      const biometricid = document.getElementById('updateSelect').value;
+      if (!biometricid) return;
+      const people = await fetchPeople();
+      const person = people.find(p => p.biometricid === biometricid);
+      if (person) {
+        document.getElementById('updateName').value = person.name;
+        document.getElementById('updateMainDoorAccess').checked = person.doors && person.doors.includes("main");
+        document.getElementById('updateGardenDoorAccess').checked = person.doors && person.doors.includes("garden");
+      }
+    }
+
+    async function updatePerson() {
+      const biometricid = document.getElementById('updateSelect').value;
+      const newName = document.getElementById('updateName').value;
+      if (!biometricid || !newName) {
+        alert('Select a person and enter a new name.');
+        return;
+      }
+      const doors = [];
+      if (document.getElementById('updateMainDoorAccess').checked) { doors.push("main"); }
+      if (document.getElementById('updateGardenDoorAccess').checked) { doors.push("garden"); }
+      await fetch(`/api/people/${biometricid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName, doors })
+      });
+      document.getElementById('updateName').value = '';
+      loadPeople();
+    }
+
+    async function deletePerson() {
+      const biometricid = document.getElementById('deleteSelect').value;
+      if (!biometricid) {
+        alert('Select a person to delete.');
+        return;
+      }
+      await fetch(`/api/people/${biometricid}`, {
+        method: 'DELETE'
+      });
+      loadPeople();
+    }
+
+    // Simple tab functionality
+    function openTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+    }
+
+    (async function init() {
+      loadPeople();
+      loadDoorStatus();
+    })();
+  </script>
+</body>
+</html>
